@@ -82,7 +82,11 @@ class OnlinePaSource : public OnlineAudioSourceItf {
   OnlinePaSource(const uint32 timeout,
                  const uint32 sample_rate,
                  const uint32 rb_size,
-                 const uint32 report_interval);
+                 const uint32 report_interval,
+                 const int device_index = -1);  // index -1 => use default
+
+  // Prints available portaudio microphones to standard output
+  static void DebugListMicrophones();
 
   // Implementation of the OnlineAudioSourceItf
   bool Read(Vector<BaseFloat> *data);
@@ -113,6 +117,7 @@ class OnlinePaSource : public OnlineAudioSourceItf {
   bool timed_out_; // True if the last call to Read() failed to obtain the requested
                    // number of samples, because of timeout
   uint32 sample_rate_; // the sampling rate of the input audio
+  int device_index_;  // portaudio device index or -1 to use default
   int32 rb_size_;
   char *ring_buffer_; // points to the actual buffer used by PA to store samples
   PaUtilRingBuffer pa_ringbuf_; // a data structure used to wrap the ring buffer

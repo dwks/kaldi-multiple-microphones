@@ -23,6 +23,7 @@
 #include <algorithm>
 #include <cmath>
 #include <vector>
+#include <iostream>
 
 
 #ifndef KALDI_NO_PORTAUDIO
@@ -49,11 +50,12 @@ int PaCallback(const void *input, void *output,
 OnlinePaSource::OnlinePaSource(const uint32 timeout,
                                const uint32 sample_rate,
                                const uint32 rb_size,
-                               const uint32 report_interval)
+                               const uint32 report_interval,
+                               const int device_index)
     : timeout_(timeout), timed_out_(false),
-      sample_rate_(sample_rate), pa_started_(false),
-      report_interval_(report_interval), nread_calls_(0),
-      noverflows_(0), samples_lost_(0) {
+      sample_rate_(sample_rate), device_index_(device_index),
+      pa_started_(false), report_interval_(report_interval),
+      nread_calls_(0), noverflows_(0), samples_lost_(0) {
   using namespace std;
 
   // Note this will work for 32bit integers but not for 64bit.
@@ -80,10 +82,47 @@ OnlinePaSource::OnlinePaSource(const uint32 timeout,
   // Monophone, 16-bit input hardcoded
   KALDI_ASSERT(sizeof(SampleType) == 2 &&
                "The current OnlinePaSource code assumes 16-bit input");
-  paerr = Pa_OpenDefaultStream(&pa_stream_, 1, 0, paInt16, sample_rate_, 0,
-                               PaCallback, this);
+  if(device_index_ < 0) {
+    paerr = Pa_OpenDefaultStream(&pa_stream_, 1, 0, paInt16, sample_rate_, 0,
+                                 PaCallback, this);
+  }
+  else {
+    const PaDeviceInfo *info = Pa_GetDeviceInfo(device_index_);
+    PaStreamParameters params;
+    params.device = device_index_;
+    params.channelCount = 1;
+    params.sampleFormat = paInt16;
+    params.suggestedLatency = info->defaultLowInputLatency;
+    paerr = Pa_OpenStream(&pa_stream_, &params, NULL, sample_rate_, 0,
+                          0, PaCallback, this);
+  }
   if (paerr != paNoError)
     throw runtime_error("PortAudio failed to open the default stream");
+}
+
+
+void OnlinePaSource::DebugListMicrophones() {
+  PaError paerr = Pa_Initialize();
+  if (paerr != paNoError)
+    throw std::runtime_error("PortAudio initialization error");
+
+  std::cout << "Here are the input/output devices on your system.\n"
+    << "If the device does not support 16-bit audio, we cannot use it;\n"
+    << "in that case configure pulseaudio to do downsampling and select\n"
+    << "the pulseaudio device here.\n\n";
+
+  std::cout << "showing " << Pa_GetDeviceCount() << " devices\n";
+  for(PaDeviceIndex index = 0; index < Pa_GetDeviceCount(); index ++) {
+    const PaDeviceInfo *info = Pa_GetDeviceInfo(index);
+    if(info->maxInputChannels == 0) continue;  // output device only
+
+    std::cout << "index " << index << ": " << info->name << "\n";
+    std::cout << "    input channels=" << info->maxInputChannels
+      << ", output channels=" << info->maxOutputChannels
+      << ", default sample rate=" << info->defaultSampleRate;
+  }
+
+  Pa_Terminate();
 }
 
 

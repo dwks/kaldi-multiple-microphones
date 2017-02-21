@@ -54,6 +54,8 @@ int main(int argc, char *argv[]) {
         "Feature splicing/LDA transform is used, if the optional(last) argument "
         "is given.\n"
         "Otherwise delta/delta-delta(2-nd order) features are produced.\n\n"
+        "To select an appropriate microphone device, first run with --list-mics, "
+        "then run with --mic=NUM.\n\n"
         "Usage: online-gmm-decode-faster [options] <model-in>"
         "<fst-in> <word-symbol-table> <silence-phones> [<lda-matrix-in>]\n\n"
         "Example: online-gmm-decode-faster --rt-min=0.3 --rt-max=0.5 "
@@ -63,6 +65,8 @@ int main(int argc, char *argv[]) {
     BaseFloat acoustic_scale = 0.1;
     int32 cmn_window = 600, min_cmn_window = 100;
     int32 right_context = 4, left_context = 4;
+    bool list_mics = false;
+    int mic_device = -1;
 
     kaldi::DeltaFeaturesOptions delta_opts;
     delta_opts.Register(&po);
@@ -80,8 +84,18 @@ int main(int argc, char *argv[]) {
     po.Register("min-cmn-window", &min_cmn_window,
                 "Minumum CMN window used at start of decoding (adds "
                 "latency only at start)");
+    po.Register("list-mics", &list_mics,
+                "List all available microphone devices in the system");
+    po.Register("mic", &mic_device,
+                "Use specified microphone device (default is -1)");
 
     po.Read(argc, argv);
+
+    if (list_mics) {
+      OnlinePaSource::DebugListMicrophones();
+      return 0;
+    }
+
     if (po.NumArgs() != 4 && po.NumArgs() != 5) {
       po.PrintUsage();
       return 1;
@@ -135,7 +149,8 @@ int main(int argc, char *argv[]) {
     OnlineFasterDecoder decoder(*decode_fst, decoder_opts,
                                 silence_phones, trans_model);
     VectorFst<LatticeArc> out_fst;
-    OnlinePaSource au_src(kTimeout, kSampleFreq, kPaRingSize, kPaReportInt);
+    OnlinePaSource au_src(kTimeout, kSampleFreq, kPaRingSize, kPaReportInt,
+                          mic_device);
     Mfcc mfcc(mfcc_opts);
     FeInput fe_input(&au_src, &mfcc,
                      frame_length * (kSampleFreq / 1000),
